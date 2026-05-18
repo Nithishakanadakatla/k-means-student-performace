@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle
 import os
+
+import plotly.express as px
 
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -11,11 +12,12 @@ from sklearn.metrics import silhouette_score
 
 st.set_page_config(page_title="Student ML App", layout="wide")
 
-st.title("🎓 Student Performance Clustering System (KMeans)")
-st.write("Train model, evaluate clustering, and predict student category")
+st.title("🎓 Student Performance Clustering System")
+st.write("K-Means Clustering with Evaluation Metrics & Prediction")
 
 MODEL_FILE = "kmeans_model.pkl"
 SCALER_FILE = "scaler.pkl"
+MAP_FILE = "cluster_map.pkl"
 
 # -----------------------------
 # Upload Dataset
@@ -55,13 +57,10 @@ if uploaded_file:
         with open(SCALER_FILE, "wb") as f:
             pickle.dump(scaler, f)
 
-        st.success("✅ Model Trained & Saved!")
-
         # -----------------------------
-        # 📊 Evaluation Metrics
+        # Evaluation Metrics
         # -----------------------------
         inertia = kmeans.inertia_
-
         sil_score = silhouette_score(X_scaled, df['Cluster'])
 
         st.subheader("📊 Model Evaluation")
@@ -70,7 +69,7 @@ if uploaded_file:
         col1.metric("Inertia (WCSS)", f"{inertia:.2f}")
         col2.metric("Silhouette Score", f"{sil_score:.3f}")
 
-        st.info("💡 Higher Silhouette = Better | Lower Inertia = Better")
+        st.info("Higher Silhouette = Better | Lower Inertia = Better")
 
         # -----------------------------
         # Cluster Naming
@@ -94,11 +93,10 @@ if uploaded_file:
         cluster_label_map = dict(zip(centers_df['Cluster'], centers_df['Label']))
         df['Category'] = df['Cluster'].map(cluster_label_map)
 
-        # Save mapping for prediction use
-        with open("cluster_map.pkl", "wb") as f:
+        # Save mapping
+        with open(MAP_FILE, "wb") as f:
             pickle.dump(cluster_label_map, f)
 
-        # Display
         st.subheader("🏷 Cluster Labels")
         st.dataframe(centers_df[['Cluster', 'Label']])
 
@@ -106,34 +104,31 @@ if uploaded_file:
         st.dataframe(df)
 
         # -----------------------------
-        # Visualization
+        # Plotly Visualization
         # -----------------------------
         st.subheader("📊 Visualization")
 
-        fig, ax = plt.subplots()
-        ax.scatter(df['StudyHours'], df['PreviousMarks'], c=df['Cluster'])
+        fig = px.scatter(
+            df,
+            x='StudyHours',
+            y='PreviousMarks',
+            color='Category',
+            title="Student Segmentation",
+            hover_data=['Attendance', 'InternalAssessment']
+        )
 
-        for i in range(len(df)):
-            ax.annotate(df['Category'][i],
-                        (df['StudyHours'][i], df['PreviousMarks'][i]),
-                        fontsize=6)
+        st.plotly_chart(fig, use_container_width=True)
 
-        ax.set_xlabel("Study Hours")
-        ax.set_ylabel("Previous Marks")
-        ax.set_title("Student Segmentation")
-
-        st.pyplot(fig)
-
-        # Download results
+        # Download
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Result CSV", csv, "segmented_students.csv", "text/csv")
+        st.download_button("📥 Download Result", csv, "segmented_students.csv")
 
 # -----------------------------
 # Prediction Section
 # -----------------------------
 st.header("🔮 Predict Student Category")
 
-if os.path.exists(MODEL_FILE) and os.path.exists(SCALER_FILE) and os.path.exists("cluster_map.pkl"):
+if os.path.exists(MODEL_FILE) and os.path.exists(SCALER_FILE) and os.path.exists(MAP_FILE):
 
     with open(MODEL_FILE, "rb") as f:
         model = pickle.load(f)
@@ -141,7 +136,7 @@ if os.path.exists(MODEL_FILE) and os.path.exists(SCALER_FILE) and os.path.exists
     with open(SCALER_FILE, "rb") as f:
         scaler = pickle.load(f)
 
-    with open("cluster_map.pkl", "rb") as f:
+    with open(MAP_FILE, "rb") as f:
         cluster_map = pickle.load(f)
 
     col1, col2, col3 = st.columns(3)
@@ -170,8 +165,8 @@ if os.path.exists(MODEL_FILE) and os.path.exists(SCALER_FILE) and os.path.exists
         cluster = model.predict(input_scaled)[0]
         label = cluster_map.get(cluster, "Unknown")
 
-        st.success(f"Predicted Cluster: {cluster}")
-        st.info(f"🎓 Student Category: {label}")
+        st.success(f"Cluster: {cluster}")
+        st.info(f"🎓 Category: {label}")
 
 else:
     st.warning("⚠️ Train model first to enable predictions.")
